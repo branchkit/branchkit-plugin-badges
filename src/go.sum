@@ -1,0 +1,6 @@
+github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
+github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
+github.com/branchkit/plugin-sdk-go v0.16.0 h1:3BGBYmMW9oFQtLCAKxYjx+GsQz5mSoMJYI7olvYOY6s=
+github.com/branchkit/plugin-sdk-go v0.16.0/go.mod h1:fRlJl1KxGKmeSUfvf7x6kP6N3bY6xnhAqlXhImMK03o=
+golang.org/x/sys v0.10.0 h1:SqMFp9UcQJZa+pmYuAKjd9xq1f0j5rLcDIk0mj4qAsA=
+golang.org/x/sys v0.10.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=

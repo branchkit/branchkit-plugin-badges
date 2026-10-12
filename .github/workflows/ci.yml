@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: gofmt
+        # The source is the same on every OS, and a Windows checkout has
+        # CRLF line endings, which gofmt reports as unformatted.
+        if: runner.os != 'Windows'
+        working-directory: src
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: vet
+        working-directory: src
+        run: go vet ./...
+      - name: test
+        working-directory: src
+        run: go test -race ./...
+      - name: build
+        working-directory: src
+        run: go build -o ../badges-plugin .

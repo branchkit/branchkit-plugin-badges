@@ -1,0 +1,94 @@
+[
+  {
+    "pattern": [
+      "show",
+      "badges"
+    ],
+    "action": {
+      "type": "badges.show"
+    },
+    "category": "Pointing",
+    "description": "Put a code word on each control of the window in front: buttons, links, menus, checkboxes, fields. Say a code word to press that control."
+  },
+  {
+    "pattern": [
+      "show",
+      "badge"
+    ],
+    "action": {
+      "type": "badges.show"
+    },
+    "category": "Pointing",
+    "description": "Put a code word on each control of the window in front: buttons, links, menus, checkboxes, fields. Say a code word to press that control."
+  },
+  {
+    "pattern": [
+      "show",
+      "badges"
+    ],
+    "action": {
+      "type": "badges.show"
+    },
+    "requires_tags": [
+      "_surface.badges.targets"
+    ],
+    "category": "Pointing",
+    "description": "Read the window again and badge it afresh, while badges are showing. Without this, the phrase is not in the open badges' grammar and is heard as a code word."
+  },
+  {
+    "pattern": [
+      "show",
+      "badge"
+    ],
+    "action": {
+      "type": "badges.show"
+    },
+    "requires_tags": [
+      "_surface.badges.targets"
+    ],
+    "category": "Pointing",
+    "description": "Read the window again and badge it afresh, while badges are showing. Without this, the phrase is not in the open badges' grammar and is heard as a code word."
+  },
+  {
+    "pattern": [
+      "<row:@targets>"
+    ],
+    "action": {
+      "type": "badges.press",
+      "params": {
+        "handle": "{row.handle}",
+        "action": "{row.action}"
+      }
+    },
+    "category": "Pointing",
+    "description": "Press the control with this code word."
+  },
+  {
+    "pattern": [
+      "hide",
+      "badges"
+    ],
+    "action": {
+      "type": "badges.hide"
+    },
+    "requires_tags": [
+      "_surface.badges.targets"
+    ],
+    "category": "Pointing",
+    "description": "Take the badges down without pressing anything (\"over\" does too)."
+  },
+  {
+    "pattern": [
+      "hide",
+      "badge"
+    ],
+    "action": {
+      "type": "badges.hide"
+    },
+    "requires_tags": [
+      "_surface.badges.targets"
+    ],
+    "category": "Pointing",
+    "description": "Take the badges down without pressing anything (\"over\" does too)."
+  }
+]

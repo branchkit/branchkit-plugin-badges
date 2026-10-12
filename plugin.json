@@ -1,0 +1,177 @@
+{
+  "$schema": "https://branchkit.dev/schemas/manifest.json",
+  "id": "badges",
+  "name": "Badges",
+  "icon": "tag",
+  "version": "0.1.0",
+  "min_api_version": "0.2.0",
+  "description": "Act on any control in the window in front by voice. Say \"show badges\": a code word appears on each of the window's buttons, links, menus, checkboxes and fields; say a code word to press that control. The window is read only when you ask.",
+  "author": "BranchKit",
+  "publisher": "github:branchkit",
+  "requires": {
+    "privileges": [
+      "accessibility",
+      "overlay"
+    ],
+    "capabilities": {
+      "uses": [
+        "hud.show",
+        "native.ax_perform_action",
+        "native.ax_targets"
+      ]
+    }
+  },
+  "dev": {
+    "build": [
+      [
+        "go",
+        "build",
+        "-ldflags=-s -w",
+        "-o",
+        "../badges-plugin",
+        "."
+      ]
+    ],
+    "build_dir": "src"
+  },
+  "run": "./badges-plugin",
+  "action_prefix": "badges",
+  "action_types": {
+    "show": {
+      "uses": [
+        "native.ax_targets"
+      ],
+      "label": "Show Badges",
+      "fields": []
+    },
+    "hide": {
+      "label": "Hide Badges",
+      "fields": []
+    },
+    "press": {
+      "uses": [
+        "native.ax_perform_action"
+      ],
+      "label": "Press Badged Control",
+      "fields": [
+        {
+          "key": "handle",
+          "label": "Element handle",
+          "field_type": "string",
+          "required": true
+        },
+        {
+          "key": "action",
+          "label": "Accessibility action",
+          "field_type": "string",
+          "required": false
+        }
+      ]
+    }
+  },
+  "provides": {
+    "collections": {
+      "plugin.badges.targets": {
+        "label": "Badged controls",
+        "storage": {
+          "type": "memory_only"
+        },
+        "writers": "introducer_only",
+        "held_by_writer": true,
+        "id_strategy": {
+          "type": "by_field",
+          "field": "id"
+        },
+        "feeds_matching": {
+          "type": "as_record_keyed"
+        },
+        "fields": [
+          {
+            "key": "name",
+            "field_type": "string",
+            "label": "Name",
+            "display": "primary"
+          },
+          {
+            "key": "role",
+            "field_type": "string",
+            "label": "Role"
+          },
+          {
+            "key": "handle",
+            "field_type": "string",
+            "display": "payload"
+          },
+          {
+            "key": "action",
+            "field_type": "string",
+            "display": "payload"
+          },
+          {
+            "key": "rank",
+            "field_type": "number",
+            "display": "payload"
+          },
+          {
+            "key": "x",
+            "field_type": "number",
+            "display": "payload"
+          },
+          {
+            "key": "y",
+            "field_type": "number",
+            "display": "payload"
+          },
+          {
+            "key": "w",
+            "field_type": "number",
+            "display": "payload"
+          },
+          {
+            "key": "h",
+            "field_type": "number",
+            "display": "payload"
+          }
+        ],
+        "description": "The window's controls while badges are showing: the `@targets` selection surface's rows. Rows present means the badges are up: the platform assigns code words in `rank` (reading) order and draws each at its row's place (`x`, `y`, `w`, `h`, screen points). `handle` is the platform's accessibility handle for the control; a password field's name is never stored. Memory only and held by this plugin, so a crash takes the badges down."
+      }
+    }
+  },
+  "selection_surfaces": {
+    "targets": {
+      "rows": "plugin.badges.targets",
+      "badges": true
+    }
+  },
+  "collection_data": {
+    "voice_commands": "commands.json"
+  },
+  "consumes": {
+    "collections": [
+      {
+        "name": "_surface",
+        "fields": [
+          "name"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "pattern": "_platform.collection.updated"
+      }
+    ]
+  },
+  "hud_windows": [
+    {
+      "channel": "message",
+      "anchor": "top-right",
+      "width": 320,
+      "min_height": 40,
+      "accepts_input": false,
+      "description": "A one-line message when the window in front cannot be badged"
+    }
+  ],
+  "implements": {
+    "on_action": true
+  }
+}
