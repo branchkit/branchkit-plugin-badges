@@ -19,6 +19,8 @@ type fake struct {
 	gates    []string
 	messages []string
 	hidden   int
+	// replaceErr fails the next ReplaceRows (it is still recorded).
+	replaceErr error
 }
 
 func (f *fake) Targets() (*branchkit.NativeAxTargetsResponse, error) { return f.targets, f.readErr }
@@ -28,7 +30,9 @@ func (f *fake) Perform(handle, action string) (bool, error) {
 }
 func (f *fake) ReplaceRows(rows []branchkit.CollectionPutEntry) error {
 	f.rows = append(f.rows, rows)
-	return nil
+	err := f.replaceErr
+	f.replaceErr = nil
+	return err
 }
 func (f *fake) SurfaceGates() ([]string, error) { return f.gates, nil }
 func (f *fake) Message(text string)             { f.messages = append(f.messages, text) }
@@ -134,5 +138,18 @@ func TestBadgesComeDownWhenTheSurfaceEndsElsewhere(t *testing.T) {
 	h.Hide() // already closed: nothing more to drain
 	if len(f.rows) != 2 {
 		t.Errorf("rows %v", f.rows)
+	}
+}
+
+func TestAFailedPublishStillComesDown(t *testing.T) {
+	f := &fake{targets: window(), replaceErr: errors.New("timed out")}
+	h := newTestHost(f)
+	if err := h.Show(); err == nil {
+		t.Fatal("the failed publish is reported")
+	}
+	// The rows may have landed after the call gave up: hiding drains them.
+	h.Hide()
+	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
+		t.Errorf("drained after a failed publish: %v", f.rows)
 	}
 }

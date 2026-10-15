@@ -125,7 +125,10 @@ func (h *Host) Show() error {
 	// Never log names: they are another application's contents.
 	branchkit.Logf(pluginID, "show: %d control(s), truncated=%v", len(rows), res.Truncated)
 	if err := h.p.ReplaceRows(rows); err != nil {
-		h.open = false
+		// What is published is unknown: the old rows may still be there, or
+		// the new ones may have landed after the call gave up. Stay open, so
+		// "hide badges", "over" or a press still drains them.
+		h.open = true
 		return err
 	}
 	h.open = true
