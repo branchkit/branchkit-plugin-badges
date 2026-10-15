@@ -178,9 +178,11 @@ func TestBadgesComeDownWhenAnotherWindowComesToTheFront(t *testing.T) {
 	if len(f.rows) != 1 {
 		t.Fatalf("drained by the report of its own window: %v", f.rows)
 	}
-	// Another window in front: drained.
-	f.front = &branchkit.NativeAxTargetsResponse{Pid: 9,
-		Window: &branchkit.AccessibleBounds{X: 0, Y: 0, Width: 400, Height: 300}}
+	// Another window of the same application, with the same frame (both
+	// filling the display): its controls are other elements. Drained.
+	save := "Save"
+	f.front = &branchkit.NativeAxTargetsResponse{Pid: 7, Window: badged.Window,
+		Targets: []branchkit.AxTarget{target("h9", "button", &save, 10, 20)}}
 	h.OnWindowFocused()
 	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
 		t.Errorf("drained when focus moved: %v", f.rows)

@@ -55,6 +55,11 @@ type Host struct {
 	// reports it: a window that moves from there leaves its badges behind.
 	window *branchkit.AccessibleBounds
 	pid    int
+	// first is the handle of the window's first control as read at show.
+	// A handle names one element for as long as the platform keeps it, so
+	// reading the front again and finding this handle first means the
+	// badged window is still the one in front.
+	first string
 	// gen counts messages, so a message's delayed hide never hides the
 	// one that replaced it.
 	gen        int
@@ -139,7 +144,7 @@ func (h *Host) Show() error {
 		return err
 	}
 	h.open = true
-	h.window, h.pid = res.Window, res.Pid
+	h.window, h.pid, h.first = res.Window, res.Pid, res.Targets[0].ID
 	h.gen++
 	h.p.HideMessage()
 	return nil
@@ -181,7 +186,7 @@ func (h *Host) closeLocked(reason string) {
 	if !h.open {
 		return
 	}
-	h.open, h.actions, h.window = false, nil, nil
+	h.open, h.actions, h.window, h.first = false, nil, nil, ""
 	if err := h.p.ReplaceRows(nil); err != nil {
 		branchkit.Logf(pluginID, "drain (%s): %v", reason, err)
 	}
@@ -218,18 +223,19 @@ func (h *Host) OnSurfaceChanged() {
 // window followed at once by "show badges" reports that very window after
 // its badges are up. The event's window id is not one the controls read
 // carries, so the front is read again (one control) and the badges stay
-// when it is still the badged window: same application, same frame.
+// only when its first control is the very element read at show: the same
+// window. Two windows of one application with the same frame still differ
+// here, and any doubt (a failed read, a window whose contents changed)
+// takes the badges down.
 func (h *Host) OnWindowFocused() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.open {
 		return
 	}
-	if h.window != nil {
-		if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
-			now.Window != nil && sameBounds(*now.Window, *h.window) {
-			return
-		}
+	if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
+		len(now.Targets) > 0 && now.Targets[0].ID == h.first {
+		return
 	}
 	h.closeLocked("focus_moved")
 }
