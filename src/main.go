@@ -93,12 +93,7 @@ func main() {
 	})
 	p.Subscribe("_surface", func(_ branchkit.CollectionUpdatedEventParams) { h.OnSurfaceChanged() })
 	p.On(branchkit.EventWindowFocused, func(json.RawMessage) { h.OnWindowFocused() })
-	p.On(branchkit.EventWindowFrameChanged, func(params json.RawMessage) {
-		var ev branchkit.WindowFrameChangedEventParams
-		if json.Unmarshal(params, &ev) == nil {
-			h.OnWindowFrameChanged(ev.Old)
-		}
-	})
+	p.On(branchkit.EventWindowFrameChanged, func(json.RawMessage) { h.OnWindowFrameChanged() })
 
 	p.Run()
 }

@@ -51,15 +51,15 @@ type Host struct {
 	// open is true from published rows until they drain.
 	open    bool
 	actions map[string]string // handle -> action
-	// window is the badged window's frame as read at show, when the app
-	// reports it: a window that moves from there leaves its badges behind.
-	window *branchkit.AccessibleBounds
-	pid    int
+	pid     int
 	// first is the handle of the window's first control as read at show.
 	// A handle names one element for as long as the platform keeps it, so
 	// reading the front again and finding this handle first means the
 	// badged window is still the one in front.
 	first string
+	// firstAt is where that control was: a window that moves or resizes
+	// moves its controls, and leaves its badges behind.
+	firstAt branchkit.AccessibleBounds
 	// gen counts messages, so a message's delayed hide never hides the
 	// one that replaced it.
 	gen        int
@@ -144,7 +144,7 @@ func (h *Host) Show() error {
 		return err
 	}
 	h.open = true
-	h.window, h.pid, h.first = res.Window, res.Pid, res.Targets[0].ID
+	h.pid, h.first, h.firstAt = res.Pid, res.Targets[0].ID, res.Targets[0].Bounds
 	h.gen++
 	h.p.HideMessage()
 	return nil
@@ -186,7 +186,7 @@ func (h *Host) closeLocked(reason string) {
 	if !h.open {
 		return
 	}
-	h.open, h.actions, h.window, h.first = false, nil, nil, ""
+	h.open, h.actions, h.first = false, nil, ""
 	if err := h.p.ReplaceRows(nil); err != nil {
 		branchkit.Logf(pluginID, "drain (%s): %v", reason, err)
 	}
@@ -240,24 +240,25 @@ func (h *Host) OnWindowFocused() {
 	h.closeLocked("focus_moved")
 }
 
-func sameBounds(a, b branchkit.AccessibleBounds) bool {
-	near := func(x, y int) bool { return x-y <= 1 && y-x <= 1 }
-	return near(a.X, b.X) && near(a.Y, b.Y) && near(a.Width, b.Width) && near(a.Height, b.Height)
-}
-
 // OnWindowFrameChanged takes the badges down when the badged window moves
-// or resizes, which leaves every badge off its control. The event names the
-// window by an id the controls read does not carry, so the window is known
-// by the frame it had: the one read at show.
-func (h *Host) OnWindowFrameChanged(old branchkit.Frame) {
+// or resizes, which leaves every badge off its control. The event names a
+// window by an id and a frame from the window layer, which neither matches
+// the controls read (the id is another id space; the frame includes
+// decorations on some systems), so the front is read again and the badges
+// stay only while its first control is the same element at the same place.
+// Another window moving moves none of these controls.
+func (h *Host) OnWindowFrameChanged() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !h.open || h.window == nil {
+	if !h.open {
 		return
 	}
-	if sameBounds(branchkit.AccessibleBounds{X: old.X, Y: old.Y, Width: old.W, Height: old.H}, *h.window) {
-		h.closeLocked("window_moved")
+	if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
+		len(now.Targets) > 0 && now.Targets[0].ID == h.first &&
+		now.Targets[0].Bounds == h.firstAt {
+		return
 	}
+	h.closeLocked("window_moved")
 }
 
 func renderMessage(msg string) string {

@@ -190,18 +190,19 @@ func TestBadgesComeDownWhenAnotherWindowComesToTheFront(t *testing.T) {
 }
 
 func TestBadgesComeDownWhenTheirWindowMoves(t *testing.T) {
-	res := window()
-	res.Window = &branchkit.AccessibleBounds{X: 100, Y: 50, Width: 800, Height: 600}
-	f := &fake{targets: res}
+	f := &fake{targets: window()}
 	h := newTestHost(f)
 	_ = h.Show()
-	// Another window moving leaves them up.
-	h.OnWindowFrameChanged(branchkit.Frame{X: 0, Y: 0, W: 300, H: 200})
+	// Another window moved: the badged window's controls did not.
+	h.OnWindowFrameChanged()
 	if len(f.rows) != 1 {
 		t.Fatalf("another window's move drained them: %v", f.rows)
 	}
-	// Their own window moving takes them down.
-	h.OnWindowFrameChanged(branchkit.Frame{X: 100, Y: 50, W: 800, H: 600})
+	// Their own window moved: its first control is elsewhere now.
+	save := "Save"
+	f.front = &branchkit.NativeAxTargetsResponse{
+		Targets: []branchkit.AxTarget{target("h1", "button", &save, 210, 120)}}
+	h.OnWindowFrameChanged()
 	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
 		t.Errorf("drained when their window moved: %v", f.rows)
 	}
