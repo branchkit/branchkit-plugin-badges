@@ -19,13 +19,20 @@ type fake struct {
 	gates    []string
 	messages []string
 	hidden   int
+	// duringRead runs inside Targets: an event arriving mid-read.
+	duringRead func()
 	// front is what is in front when asked again; nil means targets.
 	front *branchkit.NativeAxTargetsResponse
 	// replaceErr fails the next ReplaceRows (it is still recorded).
 	replaceErr error
 }
 
-func (f *fake) Targets() (*branchkit.NativeAxTargetsResponse, error) { return f.targets, f.readErr }
+func (f *fake) Targets() (*branchkit.NativeAxTargetsResponse, error) {
+	if f.duringRead != nil {
+		f.duringRead()
+	}
+	return f.targets, f.readErr
+}
 func (f *fake) Front() (*branchkit.NativeAxTargetsResponse, error) {
 	if f.front != nil {
 		return f.front, nil
@@ -205,5 +212,30 @@ func TestBadgesComeDownWhenTheirWindowMoves(t *testing.T) {
 	h.OnWindowFrameChanged()
 	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
 		t.Errorf("drained when their window moved: %v", f.rows)
+	}
+}
+
+func TestAFocusChangeDuringTheReadIsCheckedAfterPublishing(t *testing.T) {
+	f := &fake{targets: window()}
+	h := newTestHost(f)
+	save := "Save"
+	f.duringRead = func() {
+		// Another window comes to the front while the window is read.
+		f.front = &branchkit.NativeAxTargetsResponse{Pid: 9,
+			Targets: []branchkit.AxTarget{target("h9", "button", &save, 0, 0)}}
+		go h.OnWindowFocused()
+		for {
+			h.mu.Lock()
+			n := h.moved
+			h.mu.Unlock()
+			if n > 0 {
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	_ = h.Show()
+	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
+		t.Errorf("drained after publishing, since focus moved mid-read: %v", f.rows)
 	}
 }

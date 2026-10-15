@@ -60,6 +60,9 @@ type Host struct {
 	// firstAt is where that control was: a window that moves or resizes
 	// moves its controls, and leaves its badges behind.
 	firstAt branchkit.AccessibleBounds
+	// moved counts window focus and frame events, open or not, so a show
+	// can tell one arrived while it was reading the window.
+	moved int
 	// gen counts messages, so a message's delayed hide never hides the
 	// one that replaced it.
 	gen        int
@@ -112,6 +115,9 @@ func rowRecords(targets []branchkit.AxTarget) ([]branchkit.CollectionPutEntry, e
 // Show reads the window in front and puts badges on its controls; while
 // badges are up it reads the window again.
 func (h *Host) Show() error {
+	h.mu.Lock()
+	movedBefore := h.moved
+	h.mu.Unlock()
 	res, err := h.p.Targets()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -147,6 +153,11 @@ func (h *Host) Show() error {
 	h.pid, h.first, h.firstAt = res.Pid, res.Targets[0].ID, res.Targets[0].Bounds
 	h.gen++
 	h.p.HideMessage()
+	// A window was focused, moved or resized while the read ran (it can
+	// take seconds), and no later event will come to say so: check once.
+	if h.moved != movedBefore && !h.stillFrontLocked(true) {
+		h.closeLocked("moved_while_reading")
+	}
 	return nil
 }
 
@@ -230,14 +241,21 @@ func (h *Host) OnSurfaceChanged() {
 func (h *Host) OnWindowFocused() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !h.open {
-		return
+	h.moved++
+	if h.open && !h.stillFrontLocked(false) {
+		h.closeLocked("focus_moved")
 	}
-	if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
-		len(now.Targets) > 0 && now.Targets[0].ID == h.first {
-		return
+}
+
+// stillFrontLocked reads the front again and says whether its first
+// control is the one read at show (and, with place, still where it was).
+func (h *Host) stillFrontLocked(place bool) bool {
+	now, err := h.p.Front()
+	if err != nil || now == nil || now.Pid != h.pid || len(now.Targets) == 0 {
+		return false
 	}
-	h.closeLocked("focus_moved")
+	first := now.Targets[0]
+	return first.ID == h.first && (!place || first.Bounds == h.firstAt)
 }
 
 // OnWindowFrameChanged takes the badges down when the badged window moves
@@ -250,15 +268,10 @@ func (h *Host) OnWindowFocused() {
 func (h *Host) OnWindowFrameChanged() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !h.open {
-		return
+	h.moved++
+	if h.open && !h.stillFrontLocked(true) {
+		h.closeLocked("window_moved")
 	}
-	if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
-		len(now.Targets) > 0 && now.Targets[0].ID == h.first &&
-		now.Targets[0].Bounds == h.firstAt {
-		return
-	}
-	h.closeLocked("window_moved")
 }
 
 func renderMessage(msg string) string {
