@@ -32,6 +32,9 @@ var rowRoles = map[string]branchkit.FieldDisplay{
 // with the SDK; tests answer it with a recorder.
 type platform interface {
 	Targets() (*branchkit.NativeAxTargetsResponse, error)
+	// Front reads which application and window are in front now: the same
+	// read as Targets, kept to one control.
+	Front() (*branchkit.NativeAxTargetsResponse, error)
 	Perform(handle, action string) (bool, error)
 	ReplaceRows(rows []branchkit.CollectionPutEntry) error
 	SurfaceGates() ([]string, error)
@@ -51,6 +54,7 @@ type Host struct {
 	// window is the badged window's frame as read at show, when the app
 	// reports it: a window that moves from there leaves its badges behind.
 	window *branchkit.AccessibleBounds
+	pid    int
 	// gen counts messages, so a message's delayed hide never hides the
 	// one that replaced it.
 	gen        int
@@ -135,7 +139,7 @@ func (h *Host) Show() error {
 		return err
 	}
 	h.open = true
-	h.window = res.Window
+	h.window, h.pid = res.Window, res.Pid
 	h.gen++
 	h.p.HideMessage()
 	return nil
@@ -209,10 +213,30 @@ func (h *Host) OnSurfaceChanged() {
 // OnWindowFocused takes the badges down when another window comes to the
 // front: they mark places in the window that was read, and their code words
 // would press controls in a window no longer in front.
+//
+// The event comes from a poll and can arrive seconds late, so a switch to a
+// window followed at once by "show badges" reports that very window after
+// its badges are up. The event's window id is not one the controls read
+// carries, so the front is read again (one control) and the badges stay
+// when it is still the badged window: same application, same frame.
 func (h *Host) OnWindowFocused() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if !h.open {
+		return
+	}
+	if h.window != nil {
+		if now, err := h.p.Front(); err == nil && now != nil && now.Pid == h.pid &&
+			now.Window != nil && sameBounds(*now.Window, *h.window) {
+			return
+		}
+	}
 	h.closeLocked("focus_moved")
+}
+
+func sameBounds(a, b branchkit.AccessibleBounds) bool {
+	near := func(x, y int) bool { return x-y <= 1 && y-x <= 1 }
+	return near(a.X, b.X) && near(a.Y, b.Y) && near(a.Width, b.Width) && near(a.Height, b.Height)
 }
 
 // OnWindowFrameChanged takes the badges down when the badged window moves
@@ -225,9 +249,7 @@ func (h *Host) OnWindowFrameChanged(old branchkit.Frame) {
 	if !h.open || h.window == nil {
 		return
 	}
-	near := func(a, b int) bool { return a-b <= 1 && b-a <= 1 }
-	w := h.window
-	if near(old.X, w.X) && near(old.Y, w.Y) && near(old.W, w.Width) && near(old.H, w.Height) {
+	if sameBounds(branchkit.AccessibleBounds{X: old.X, Y: old.Y, Width: old.W, Height: old.H}, *h.window) {
 		h.closeLocked("window_moved")
 	}
 }

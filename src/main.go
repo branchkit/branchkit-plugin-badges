@@ -20,6 +20,11 @@ func (s sdkPlatform) Targets() (*branchkit.NativeAxTargetsResponse, error) {
 	return s.p.NativeAxTargets(branchkit.NativeAxTargetsRequest{})
 }
 
+func (s sdkPlatform) Front() (*branchkit.NativeAxTargetsResponse, error) {
+	one := 1
+	return s.p.NativeAxTargets(branchkit.NativeAxTargetsRequest{Limit: &one})
+}
+
 func (s sdkPlatform) Perform(handle, action string) (bool, error) {
 	return s.p.NativeAxPerformAction(branchkit.NativeAxPerformActionRequest{
 		Element: branchkit.AccessibleRef{ID: &handle},

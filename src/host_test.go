@@ -19,11 +19,19 @@ type fake struct {
 	gates    []string
 	messages []string
 	hidden   int
+	// front is what is in front when asked again; nil means targets.
+	front *branchkit.NativeAxTargetsResponse
 	// replaceErr fails the next ReplaceRows (it is still recorded).
 	replaceErr error
 }
 
 func (f *fake) Targets() (*branchkit.NativeAxTargetsResponse, error) { return f.targets, f.readErr }
+func (f *fake) Front() (*branchkit.NativeAxTargetsResponse, error) {
+	if f.front != nil {
+		return f.front, nil
+	}
+	return f.targets, f.readErr
+}
 func (f *fake) Perform(handle, action string) (bool, error) {
 	f.pressed = append(f.pressed, [2]string{handle, action})
 	return f.pressOK, nil
@@ -155,13 +163,24 @@ func TestAFailedPublishStillComesDown(t *testing.T) {
 }
 
 func TestBadgesComeDownWhenAnotherWindowComesToTheFront(t *testing.T) {
-	f := &fake{targets: window()}
+	badged := window()
+	badged.Pid = 7
+	badged.Window = &branchkit.AccessibleBounds{X: 100, Y: 50, Width: 800, Height: 600}
+	f := &fake{targets: badged}
 	h := newTestHost(f)
 	h.OnWindowFocused() // nothing showing: nothing to drain
 	if len(f.rows) != 0 {
 		t.Fatalf("rows %v", f.rows)
 	}
 	_ = h.Show()
+	// The poll's late report of the switch to this very window: kept.
+	h.OnWindowFocused()
+	if len(f.rows) != 1 {
+		t.Fatalf("drained by the report of its own window: %v", f.rows)
+	}
+	// Another window in front: drained.
+	f.front = &branchkit.NativeAxTargetsResponse{Pid: 9,
+		Window: &branchkit.AccessibleBounds{X: 0, Y: 0, Width: 400, Height: 300}}
 	h.OnWindowFocused()
 	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
 		t.Errorf("drained when focus moved: %v", f.rows)
