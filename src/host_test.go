@@ -239,3 +239,19 @@ func TestAFocusChangeDuringTheReadIsCheckedAfterPublishing(t *testing.T) {
 		t.Errorf("drained after publishing, since focus moved mid-read: %v", f.rows)
 	}
 }
+
+func TestBadgesComeDownWhenTheirWindowResizesAroundItsFirstControl(t *testing.T) {
+	shown := window()
+	shown.Window = &branchkit.AccessibleBounds{X: 0, Y: 0, Width: 800, Height: 600}
+	f := &fake{targets: shown}
+	h := newTestHost(f)
+	_ = h.Show()
+	// Dragged from the far corner: the first control stayed put.
+	resized := window()
+	resized.Window = &branchkit.AccessibleBounds{X: 0, Y: 0, Width: 500, Height: 400}
+	f.front = resized
+	h.OnWindowFrameChanged()
+	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
+		t.Errorf("drained when their window resized: %v", f.rows)
+	}
+}

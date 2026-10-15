@@ -60,6 +60,9 @@ type Host struct {
 	// firstAt is where that control was: a window that moves or resizes
 	// moves its controls, and leaves its badges behind.
 	firstAt branchkit.AccessibleBounds
+	// windowAt is the window's own bounds from the same read, when it
+	// reports them: a resize can leave the first control where it was.
+	windowAt *branchkit.AccessibleBounds
 	// moved counts window focus and frame events, open or not, so a show
 	// can tell one arrived while it was reading the window.
 	moved int
@@ -151,6 +154,7 @@ func (h *Host) Show() error {
 	}
 	h.open = true
 	h.pid, h.first, h.firstAt = res.Pid, res.Targets[0].ID, res.Targets[0].Bounds
+	h.windowAt = res.Window
 	h.gen++
 	h.p.HideMessage()
 	// A window was focused, moved or resized while the read ran (it can
@@ -197,7 +201,7 @@ func (h *Host) closeLocked(reason string) {
 	if !h.open {
 		return
 	}
-	h.open, h.actions, h.first = false, nil, ""
+	h.open, h.actions, h.first, h.windowAt = false, nil, "", nil
 	if err := h.p.ReplaceRows(nil); err != nil {
 		branchkit.Logf(pluginID, "drain (%s): %v", reason, err)
 	}
@@ -255,7 +259,15 @@ func (h *Host) stillFrontLocked(place bool) bool {
 		return false
 	}
 	first := now.Targets[0]
-	return first.ID == h.first && (!place || first.Bounds == h.firstAt)
+	if first.ID != h.first {
+		return false
+	}
+	if !place {
+		return true
+	}
+	sameWindow := (now.Window == nil) == (h.windowAt == nil) &&
+		(now.Window == nil || *now.Window == *h.windowAt)
+	return first.Bounds == h.firstAt && sameWindow
 }
 
 // OnWindowFrameChanged takes the badges down when the badged window moves
