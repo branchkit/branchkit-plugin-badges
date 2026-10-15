@@ -48,6 +48,9 @@ type Host struct {
 	// open is true from published rows until they drain.
 	open    bool
 	actions map[string]string // handle -> action
+	// window is the badged window's frame as read at show, when the app
+	// reports it: a window that moves from there leaves its badges behind.
+	window *branchkit.AccessibleBounds
 	// gen counts messages, so a message's delayed hide never hides the
 	// one that replaced it.
 	gen        int
@@ -132,6 +135,7 @@ func (h *Host) Show() error {
 		return err
 	}
 	h.open = true
+	h.window = res.Window
 	h.gen++
 	h.p.HideMessage()
 	return nil
@@ -173,7 +177,7 @@ func (h *Host) closeLocked(reason string) {
 	if !h.open {
 		return
 	}
-	h.open, h.actions = false, nil
+	h.open, h.actions, h.window = false, nil, nil
 	if err := h.p.ReplaceRows(nil); err != nil {
 		branchkit.Logf(pluginID, "drain (%s): %v", reason, err)
 	}
@@ -200,6 +204,32 @@ func (h *Host) OnSurfaceChanged() {
 		}
 	}
 	h.closeLocked("surface_cleared")
+}
+
+// OnWindowFocused takes the badges down when another window comes to the
+// front: they mark places in the window that was read, and their code words
+// would press controls in a window no longer in front.
+func (h *Host) OnWindowFocused() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.closeLocked("focus_moved")
+}
+
+// OnWindowFrameChanged takes the badges down when the badged window moves
+// or resizes, which leaves every badge off its control. The event names the
+// window by an id the controls read does not carry, so the window is known
+// by the frame it had: the one read at show.
+func (h *Host) OnWindowFrameChanged(old branchkit.Frame) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.open || h.window == nil {
+		return
+	}
+	near := func(a, b int) bool { return a-b <= 1 && b-a <= 1 }
+	w := h.window
+	if near(old.X, w.X) && near(old.Y, w.Y) && near(old.W, w.Width) && near(old.H, w.Height) {
+		h.closeLocked("window_moved")
+	}
 }
 
 func renderMessage(msg string) string {

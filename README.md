@@ -30,7 +30,9 @@ Privacy: the window is read only when you ask, and only the window in front.
 A password field's name is never read, and names are never logged. Nothing
 is stored: the list lives in memory while the badges are up.
 
-Privileges: `accessibility` (read and act on another application's controls)
-and `overlay` (the badges are drawn over the screen).
+Privileges: `accessibility` (read and act on another application's controls),
+`overlay` (the badges are drawn over the screen) and `events.world` (when
+another window comes to the front, or the badged window moves, the badges
+come down: they would no longer mark its controls).
 
 MIT.
