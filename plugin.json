@@ -3,6 +3,7 @@
   "id": "badges",
   "name": "Badges",
   "icon": "tag",
+  "icon_color": "violet",
   "version": "0.1.0",
   "min_api_version": "0.2.0",
   "description": "Act on any control in the window in front by voice. Say \"show badges\": a code word appears on each of the window's buttons, links, menus, checkboxes and fields; say a code word to press that control. The window is read only when you ask.",
