@@ -19,6 +19,11 @@ type fake struct {
 	gates    []string
 	messages []string
 	hidden   int
+	states   []branchkit.OutputState
+	cleared  int
+	// output is the order of Message ("message"), PublishState ("state")
+	// and ClearState ("clear") calls.
+	output []string
 	// duringRead runs inside Targets: an event arriving mid-read.
 	duringRead func()
 	// front is what is in front when asked again; nil means targets.
@@ -50,8 +55,19 @@ func (f *fake) ReplaceRows(rows []branchkit.CollectionPutEntry) error {
 	return err
 }
 func (f *fake) SurfaceGates() ([]string, error) { return f.gates, nil }
-func (f *fake) Message(text string)             { f.messages = append(f.messages, text) }
-func (f *fake) HideMessage()                    { f.hidden++ }
+func (f *fake) Message(text string) {
+	f.messages = append(f.messages, text)
+	f.output = append(f.output, "message")
+}
+func (f *fake) HideMessage() { f.hidden++ }
+func (f *fake) PublishState(doc branchkit.OutputState) {
+	f.states = append(f.states, doc)
+	f.output = append(f.output, "state")
+}
+func (f *fake) ClearState() {
+	f.cleared++
+	f.output = append(f.output, "clear")
+}
 
 func target(id, role string, name *string, x, y int) branchkit.AxTarget {
 	return branchkit.AxTarget{
@@ -253,5 +269,105 @@ func TestBadgesComeDownWhenTheirWindowResizesAroundItsFirstControl(t *testing.T)
 	h.OnWindowFrameChanged()
 	if len(f.rows) != 2 || len(f.rows[1]) != 0 {
 		t.Errorf("drained when their window resized: %v", f.rows)
+	}
+}
+
+// Each message the window shows is published as a problem in the same
+// words, on the window's own channel, so speech and the window's
+// accessibility element say what the pixels say.
+func TestEachMessageIsPublishedAsAProblemInTheSameWords(t *testing.T) {
+	cases := map[string]func(f *fake, h *Host){
+		"read failed": func(f *fake, h *Host) {
+			f.readErr = errors.New("no window")
+			_ = h.Show()
+		},
+		"nothing found": func(f *fake, h *Host) {
+			f.targets = &branchkit.NativeAxTargetsResponse{}
+			_ = h.Show()
+		},
+		"no response": func(f *fake, h *Host) {
+			f.targets = window()
+			_ = h.Show()
+			_ = h.Press("h1", "")
+		},
+	}
+	for name, run := range cases {
+		f := &fake{}
+		run(f, newTestHost(f))
+		if len(f.messages) != 1 || len(f.states) != 1 {
+			t.Errorf("%s: messages %v, states %v", name, f.messages, f.states)
+			continue
+		}
+		doc := f.states[0]
+		if doc.Kind != branchkit.OutputKindProblem || doc.Channel != hudChannel ||
+			doc.Phrase != f.messages[0] || doc.Title != f.messages[0] ||
+			doc.Locale == "" || doc.V != 1 {
+			t.Errorf("%s: state %+v for message %q", name, doc, f.messages[0])
+		}
+	}
+}
+
+func TestTheMessagesStateIsClearedWhenBadgesComeUp(t *testing.T) {
+	f := &fake{readErr: errors.New("no window")}
+	h := newTestHost(f)
+	_ = h.Show()
+	f.readErr, f.targets = nil, window()
+	f.output = nil
+	_ = h.Show()
+	if len(f.output) != 1 || f.output[0] != "clear" {
+		t.Errorf("output %v when badges replaced the message", f.output)
+	}
+	// With no message published, nothing is cleared.
+	f.output = nil
+	_ = h.Show()
+	if len(f.output) != 0 {
+		t.Errorf("output %v with no message up", f.output)
+	}
+}
+
+// The platform reports a state with the same meaning as the one it holds
+// as no change, and speech is silent for it: the same message again must
+// still be said, so each one clears what the channel held first. The clear
+// comes before the drawing, since a clear also blanks the window.
+func TestTheSameMessageAgainIsANewState(t *testing.T) {
+	f := &fake{targets: &branchkit.NativeAxTargetsResponse{}}
+	h := newTestHost(f)
+	_ = h.Show()
+	_ = h.Show()
+	want := []string{"clear", "message", "state", "clear", "message", "state"}
+	if len(f.output) != len(want) {
+		t.Fatalf("output %v, want %v", f.output, want)
+	}
+	for i := range want {
+		if f.output[i] != want[i] {
+			t.Fatalf("output %v, want %v", f.output, want)
+		}
+	}
+}
+
+// The window's time is a reading time: when it runs out the window goes,
+// but the state stays, so speech still saying the message is not cut off.
+func TestTheMessagesTimeHidesTheWindowButKeepsItsState(t *testing.T) {
+	f := &fake{targets: &branchkit.NativeAxTargetsResponse{}}
+	h := newHost(f)
+	h.messageFor = time.Millisecond
+	_ = h.Show()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		h.mu.Lock()
+		hidden := f.hidden
+		h.mu.Unlock()
+		if hidden == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the window did not hide when its time ran out")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if want := []string{"clear", "message", "state"}; len(f.output) != 3 || f.output[2] != "state" {
+		t.Errorf("output %v when only the window's time ran out, want %v", f.output, want)
 	}
 }

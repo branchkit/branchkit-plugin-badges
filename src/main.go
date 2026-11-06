@@ -73,6 +73,20 @@ func (s sdkPlatform) HideMessage() {
 	}
 }
 
+func (s sdkPlatform) PublishState(doc branchkit.OutputState) {
+	// The plugin draws the window (Message): the platform draws nothing.
+	drawsOwn := true
+	if _, err := s.p.OutputState(branchkit.OutputStateRequest{State: doc, DrawsOwnWindow: &drawsOwn}); err != nil {
+		branchkit.Logf(pluginID, "output.state: %v", err)
+	}
+}
+
+func (s sdkPlatform) ClearState() {
+	if _, err := s.p.OutputClear(branchkit.OutputClearRequest{Channel: hudChannel}); err != nil {
+		branchkit.Logf(pluginID, "output.clear: %v", err)
+	}
+}
+
 func main() {
 	p := branchkit.NewPlugin()
 	h := newHost(sdkPlatform{p: p})

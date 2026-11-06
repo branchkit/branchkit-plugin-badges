@@ -40,6 +40,12 @@ type platform interface {
 	SurfaceGates() ([]string, error)
 	Message(text string)
 	HideMessage()
+	// PublishState gives the message's meaning to every renderer that is
+	// not the window (speech, the window's accessibility element); the
+	// plugin draws the window itself. ClearState says nothing is true on
+	// the channel any more.
+	PublishState(doc branchkit.OutputState)
+	ClearState()
 }
 
 // Host holds one set of badges at a time. The platform assigns the code
@@ -70,6 +76,8 @@ type Host struct {
 	// one that replaced it.
 	gen        int
 	messageFor time.Duration
+	// stated is true from a message's published state until it is cleared.
+	stated bool
 }
 
 func newHost(p platform) *Host { return &Host{p: p, messageFor: 3 * time.Second} }
@@ -77,14 +85,51 @@ func newHost(p platform) *Host { return &Host{p: p, messageFor: 3 * time.Second}
 func (h *Host) flashLocked(msg string) {
 	h.gen++
 	gen := h.gen
+	// Clear first: the platform reports a state with the same meaning as
+	// the one it holds as no change, and speech says nothing for it, so a
+	// message repeated (the same window tried again, or a state left from
+	// before a restart) would show and stay silent. And before drawing:
+	// a clear also blanks the channel's window.
+	h.p.ClearState()
 	h.p.Message(msg)
+	h.p.PublishState(messageState(msg))
+	h.stated = true
 	time.AfterFunc(h.messageFor, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		if h.gen == gen {
+			// The window only: its time is a reading time, and clearing
+			// the state would stop speech still saying the message (the
+			// fix comes last). The problem stays true until badges come
+			// up, or a newer message supersedes it.
 			h.p.HideMessage()
 		}
 	})
+}
+
+// hideMessageLocked takes the message window down and, when a message was
+// published, clears its state: badges are up, so the problem it described
+// is over and speech and the accessibility element stop conveying it.
+func (h *Host) hideMessageLocked() {
+	h.p.HideMessage()
+	if h.stated {
+		h.stated = false
+		h.p.ClearState()
+	}
+}
+
+// messageState is a message as an output state: a problem, in the same
+// words the window shows.
+func messageState(msg string) branchkit.OutputState {
+	return branchkit.OutputState{
+		Channel: hudChannel,
+		Kind:    branchkit.OutputKindProblem,
+		Title:   msg,
+		Phrase:  msg,
+		Urgency: branchkit.OutputUrgencyNotable,
+		Locale:  "en",
+		V:       1,
+	}
 }
 
 // rowRecords maps targets to rows, keyed by handle. Rank is the reading
@@ -156,7 +201,7 @@ func (h *Host) Show() error {
 	h.pid, h.first, h.firstAt = res.Pid, res.Targets[0].ID, res.Targets[0].Bounds
 	h.windowAt = res.Window
 	h.gen++
-	h.p.HideMessage()
+	h.hideMessageLocked()
 	// A window was focused, moved or resized while the read ran (it can
 	// take seconds), and no later event will come to say so: check once.
 	if h.moved != movedBefore && !h.stillFrontLocked(true) {
